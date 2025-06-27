@@ -1,0 +1,67 @@
+# PDF-to-GraphMD Configuration
+  # This configuration controls how PDFs are parsed and converted to knowledge graphs
+
+  # Extraction method: "llm" for LLM-based extraction, "nlp" for NLP-based extraction
+  extraction_method: "llm"
+
+  # MinerU PDF parsing configuration
+  mineru:
+    language: "ch"  # Language code for OCR (ch/en)
+    use_gpu: true
+    output_formats: ["markdown", "json"]
+    batch_size: 1
+
+  # LLM-based extraction settings
+  llm:
+    model_name: "gpt-3.5-turbo"
+    api_key: null  # Set via environment variable OPENAI_API_KEY
+    base_url: null  # Custom API endpoint if needed
+    temperature: 0.1
+    max_tokens: 4000
+    force_json: true
+    system_prompt: "You are an expert knowledge extraction system."
+
+  # NLP-based extraction settings
+  nlp:
+    spacy_model: "en_core_web_sm"
+    custom_ner_model: null
+    enable_custom_relations: true
+
+  # Knowledge ontology configuration
+  ontology:
+    entity_types:
+      - "Person"
+      - "Organization"
+      - "Location"
+      - "Concept"
+      - "Theory"
+      - "Method"
+      - "Tool"
+      - "Event"
+      - "Document"
+      - "Dataset"
+    relation_types:
+      - "defined_as"
+      - "part_of"
+      - "related_to"
+      - "proposed_by"
+      - "used_in"
+      - "applies_to"
+      - "causes"
+      - "results_in"
+      - "depends_on"
+      - "extends"
+
+  # Output generation settings
+  output:
+    output_dir: "./obsidian_vault"
+    file_extension: ".md"
+    include_yaml_frontmatter: true
+    include_images: true
+    include_tables: true
+    include_formulas: true
+
+  # System processing options
+  enable_incremental: true
+  max_workers: 4
+  log_level: "INFO"
