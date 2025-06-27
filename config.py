@@ -39,7 +39,7 @@ class LLMConfig:
 @dataclass
 class NLPConfig:
     """NLP-based extraction configuration"""
-    spacy_model: str = "en_core_web_sm"
+    spacy_model: str = "zh_core_web_sm"
     custom_ner_model: Optional[str] = None
     enable_custom_relations: bool = True
 
