@@ -1,0 +1,42 @@
+# Core dependencies
+pydantic>=2.0.0
+pyyaml>=6.0
+click>=8.0.0
+
+# PDF Processing (MinerU)
+magic-pdf>=0.6.0
+torch>=1.9.0
+torchvision>=0.10.0
+
+# LLM Integration
+openai>=1.0.0
+tiktoken>=0.4.0
+
+# NLP Processing (spaCy)
+spacy>=3.4.0
+spacy-transformers>=1.1.0
+en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.4.1/en_core_web_sm-3.4.1-py3-none-any.whl
+
+# Graph Processing
+networkx>=2.8.0
+
+# File Processing
+pillow>=9.0.0
+python-magic>=0.4.24
+
+# Utilities
+tqdm>=4.64.0
+requests>=2.28.0
+beautifulsoup4>=4.11.0
+lxml>=4.9.0
+
+# Development dependencies (optional)
+pytest>=7.0.0
+pytest-cov>=3.0.0
+black>=22.0.0
+flake8>=4.0.0
+mypy>=0.971
+
+# Optional: Enhanced JSON processing
+jsonschema>=4.0.0
+outlines>=0.0.12
