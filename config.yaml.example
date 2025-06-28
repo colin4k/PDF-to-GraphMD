@@ -63,10 +63,10 @@
     include_tables: true
     include_formulas: true
     # Language configuration for markdown generation
-    language: "zh"  # Language code for markdown content generation (zh/en)
+    language: "chs"  # Language code for markdown content generation (chs/en)
     # Language-specific prompt templates
     language_prompts:
-      zh:
+      chs:
         system_prompt: "你是一个专业的知识提取和图谱构建系统。请用简体中文生成内容。"
         entity_prompt: "从以下文本中提取实体，并用简体中文描述："
         relation_prompt: "分析实体之间的关系，并用简体中文表达："
