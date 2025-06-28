@@ -50,8 +50,8 @@ setup(
             "mypy>=0.971"
         ],
         "gpu": [
-            "torch>=1.9.0+cu111",
-            "torchvision>=0.10.0+cu111"
+            "torch>=1.9.0",
+            "torchvision>=0.10.0"
         ]
     },
     entry_points={
@@ -70,6 +70,7 @@ setup(
         "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",
         "Programming Language :: Python :: 3.11",
+        "Programming Language :: Python :: 3.12",
         "Topic :: Scientific/Engineering :: Artificial Intelligence",
         "Topic :: Text Processing :: Markup",
         "Topic :: Utilities",

@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Any
 import tempfile
 import subprocess
+import shlex
 
 from ..models import DocumentContent
 from ..config import MinerUConfig
@@ -26,12 +27,20 @@ class MinerUParser:
     def _setup_environment(self):
         """Setup MinerU environment and dependencies"""
         try:
-            # Check if MinerU is available
-            import magic_pdf
-            logger.info("MinerU (magic-pdf) is available")
-        except ImportError:
-            logger.error("MinerU (magic-pdf) is not installed. Please install it first.")
-            raise ImportError("MinerU is required but not installed")
+            # Check if mineru CLI is available
+            result = subprocess.run(
+                ["mineru", "--help"],
+                capture_output=True,
+                text=True,
+                check=False
+            )
+            if result.returncode == 0:
+                logger.info("MinerU CLI is available")
+            else:
+                raise FileNotFoundError("mineru command not found")
+        except (FileNotFoundError, subprocess.SubprocessError):
+            logger.error("MinerU CLI is not installed or not in PATH. Please install mineru first.")
+            raise ImportError("MinerU CLI is required but not available")
     
     def parse_pdf(self, pdf_path: str) -> DocumentContent:
         """
@@ -70,80 +79,47 @@ class MinerUParser:
     def _run_mineru_extraction(self, pdf_path: Path, output_dir: Path) -> Dict[str, Any]:
         """Run MinerU extraction process"""
         try:
-            # Import MinerU components
-            from magic_pdf.cli.magicpdf import do_parse
-            from magic_pdf.config.drop_mode import DropMode
-            from magic_pdf.config.make_content_config import MakeContentConfig
-            
-            # Configure MinerU parameters
-            config_dict = {
-                "input_path": str(pdf_path),
-                "output_dir": str(output_dir),
-                "output_format": self.config.output_formats,
-                "parse_method": "auto",
-                "lang": self.config.language,
-                "apply_layout": True,
-                "apply_formula": True,
-                "apply_ocr": True,
-            }
-            
-            # Enable GPU if available and configured
-            if self.config.use_gpu and self._check_gpu_availability():
-                config_dict["device"] = "cuda"
-                logger.info("Using GPU acceleration for MinerU")
-            else:
-                config_dict["device"] = "cpu"
-                logger.info("Using CPU for MinerU processing")
-            
-            # Execute MinerU parsing
-            result = do_parse(
-                pdf_path=str(pdf_path),
-                output_dir=str(output_dir),
-                method="auto",
-                start_page_id=0,
-                end_page_id=None,
-                lang=self.config.language,
-                layout_mode=True,
-                formula_mode=True,
-                table_mode=True
-            )
-            
-            return result
+            # Use mineru CLI directly
+            logger.info("Using MinerU CLI interface")
+            return self._run_mineru_cli(pdf_path, output_dir)
             
         except Exception as e:
             logger.error(f"MinerU extraction failed: {str(e)}")
-            # Fallback to command line interface if Python API fails
-            return self._run_mineru_cli(pdf_path, output_dir)
+            raise
     
     def _run_mineru_cli(self, pdf_path: Path, output_dir: Path) -> Dict[str, Any]:
         """Fallback: Run MinerU via command line interface"""
         try:
+            # 确保路径参数正确处理，特别是包含空格的文件名
             cmd = [
-                "magic-pdf",
-                "pdf-command-line",
-                "--pdf", str(pdf_path),
-                "--output-dir", str(output_dir),
-                "--method", "auto"
+                "mineru",
+                "-p", str(pdf_path),
+                "-o", str(output_dir)
             ]
-            
+
+            # VLM backend
+            if hasattr(self.config, 'vlm_backend') and self.config.vlm_backend:
+                cmd.extend(["-b", self.config.vlm_backend])
+            # source
+            if hasattr(self.config, 'source') and self.config.source:
+                cmd.extend(["--source", self.config.source])
+            # language - 使用 -l 参数
             if self.config.language:
-                cmd.extend(["--lang", self.config.language])
-                
-            if self.config.use_gpu and self._check_gpu_availability():
-                cmd.append("--cuda")
-            
-            logger.info(f"Running MinerU CLI: {' '.join(cmd)}")
-            
+                cmd.extend(["-l", self.config.language])
+
+            # 记录命令，使用 shlex.join 来正确显示包含空格的参数
+            logger.info(f"Running MinerU CLI: {shlex.join(cmd)}")
+
             result = subprocess.run(
                 cmd,
                 capture_output=True,
                 text=True,
                 check=True
             )
-            
+
             logger.info("MinerU CLI execution completed")
             return {"status": "success", "output": result.stdout}
-            
+
         except subprocess.CalledProcessError as e:
             logger.error(f"MinerU CLI failed: {e.stderr}")
             raise RuntimeError(f"MinerU CLI execution failed: {e.stderr}")
@@ -156,20 +132,31 @@ class MinerUParser:
             json_files = list(output_dir.glob("**/*.json"))
             image_files = list(output_dir.glob("**/*.{png,jpg,jpeg,gif}"))
             
+            logger.info(f"Found {len(markdown_files)} markdown files, {len(json_files)} JSON files, {len(image_files)} image files")
+            
             # Read markdown content
             markdown_content = ""
             if markdown_files:
                 with open(markdown_files[0], 'r', encoding='utf-8') as f:
                     markdown_content = f.read()
+                logger.info(f"Markdown content length: {len(markdown_content)} characters")
+                logger.debug(f"Markdown preview: {markdown_content[:500]}...")
+            else:
+                logger.warning("No markdown files found in MinerU output")
             
             # Read JSON data
             json_data = {}
             if json_files:
                 with open(json_files[0], 'r', encoding='utf-8') as f:
                     json_data = json.load(f)
+                logger.info(f"JSON data keys: {list(json_data.keys())}")
+            else:
+                logger.warning("No JSON files found in MinerU output")
             
             # Extract text content from markdown (remove markdown formatting)
             text_content = self._extract_plain_text(markdown_content)
+            logger.info(f"Extracted plain text length: {len(text_content)} characters")
+            logger.debug(f"Plain text preview: {text_content[:500]}...")
             
             # Extract structured elements
             images = self._extract_images_info(json_data, image_files)

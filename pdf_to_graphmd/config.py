@@ -22,6 +22,9 @@ class MinerUConfig:
     use_gpu: bool = True
     output_formats: List[str] = field(default_factory=lambda: ["markdown", "json"])
     batch_size: int = 1
+    vlm_backend: str = "vlm-transformers"  # 支持 magic-pdf 2.0.x 的 VLM 后端
+    magic_pdf_config: str = ""  # magic-pdf.json 配置文件路径
+    source: str = "local"  # mineru CLI 的 --source 参数
 
 
 @dataclass
@@ -92,6 +95,22 @@ class SystemConfig:
         # Convert extraction method string to enum
         if 'extraction_method' in config_dict:
             config_dict['extraction_method'] = ExtractionMethod(config_dict['extraction_method'])
+        
+        # Convert nested configs to dataclass objects
+        if 'mineru' in config_dict:
+            config_dict['mineru'] = MinerUConfig(**config_dict['mineru'])
+        
+        if 'llm' in config_dict:
+            config_dict['llm'] = LLMConfig(**config_dict['llm'])
+        
+        if 'nlp' in config_dict:
+            config_dict['nlp'] = NLPConfig(**config_dict['nlp'])
+        
+        if 'ontology' in config_dict:
+            config_dict['ontology'] = OntologyConfig(**config_dict['ontology'])
+        
+        if 'output' in config_dict:
+            config_dict['output'] = OutputConfig(**config_dict['output'])
             
         return cls(**config_dict)
     

@@ -10,6 +10,9 @@
     use_gpu: true
     output_formats: ["markdown", "json"]
     batch_size: 1
+    vlm_backend: "vlm-transformers"  # 新增，magic-pdf 2.0.x 支持的 VLM 后端
+    magic_pdf_config: "magic-pdf.json"  # 新增，magic-pdf 配置文件路径
+    source: "modelscope"  # 新增，mineru CLI 的 --source 参数
 
   # LLM-based extraction settings
   llm:

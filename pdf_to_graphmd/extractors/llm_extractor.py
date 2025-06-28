@@ -129,14 +129,21 @@ class LLMExtractor:
     def _extract_from_chunk(self, text_chunk: str) -> Tuple[List[Entity], List[Relation]]:
         """Extract entities and relations from a text chunk using LLM"""
         try:
+            logger.info(f"Extracting from chunk (length: {len(text_chunk)} chars)")
+            logger.debug(f"Chunk preview: {text_chunk[:200]}...")
+            
             # Create extraction prompt
             prompt = self._create_extraction_prompt(text_chunk)
             
             # Call LLM
+            logger.info("Calling LLM API...")
             response = self._call_llm(prompt)
+            logger.info(f"LLM response received (length: {len(response)} chars)")
+            logger.debug(f"LLM response preview: {response[:500]}...")
             
             # Parse response
             entities, relations = self._parse_llm_response(response)
+            logger.info(f"Parsed {len(entities)} entities and {len(relations)} relations from chunk")
             
             return entities, relations
             
@@ -194,8 +201,12 @@ Rules:
     def _call_llm(self, messages: List[Dict[str, str]]) -> str:
         """Call LLM API with structured prompts"""
         try:
+            logger.info(f"Calling LLM with model: {self.llm_config.model_name}")
+            logger.debug(f"Messages: {messages}")
+            
             if self.llm_config.force_json:
                 # Use JSON mode if available
+                logger.info("Using JSON response format")
                 response = self.client.chat.completions.create(
                     model=self.llm_config.model_name,
                     messages=messages,
@@ -204,6 +215,7 @@ Rules:
                     response_format={"type": "json_object"}
                 )
             else:
+                logger.info("Using standard response format")
                 response = self.client.chat.completions.create(
                     model=self.llm_config.model_name,
                     messages=messages,
@@ -211,23 +223,55 @@ Rules:
                     max_tokens=self.llm_config.max_tokens
                 )
             
-            return response.choices[0].message.content
+            content = response.choices[0].message.content
+            logger.info(f"LLM API call successful, response length: {len(content)}")
+            return content
             
         except Exception as e:
             logger.error(f"LLM API call failed: {str(e)}")
+            logger.error(f"Error type: {type(e).__name__}")
+            if hasattr(e, 'response'):
+                logger.error(f"API response: {e.response}")
             raise
     
     def _parse_llm_response(self, response: str) -> Tuple[List[Entity], List[Relation]]:
         """Parse LLM response and create Entity/Relation objects"""
         try:
-            # Clean response (remove markdown formatting if present)
-            if response.startswith("```json"):
-                response = response[7:]
-            if response.endswith("```"):
-                response = response[:-3]
+            # Log the raw response for debugging
+            logger.debug(f"Raw LLM response: {repr(response)}")
             
-            # Parse JSON
-            data = json.loads(response.strip())
+            # Clean response (remove markdown formatting if present)
+            cleaned_response = response.strip()
+            if cleaned_response.startswith("```json"):
+                cleaned_response = cleaned_response[7:]
+            if cleaned_response.endswith("```"):
+                cleaned_response = cleaned_response[:-3]
+            
+            # Check if response is empty or whitespace only
+            if not cleaned_response or cleaned_response.isspace():
+                logger.warning("LLM response is empty or whitespace only")
+                return [], []
+            
+            # Try to parse JSON
+            try:
+                data = json.loads(cleaned_response)
+            except json.JSONDecodeError as e:
+                logger.error(f"JSON decode error: {str(e)}")
+                logger.error(f"Cleaned response: {repr(cleaned_response)}")
+                
+                # Try to extract JSON from the response if it's wrapped in other text
+                import re
+                json_match = re.search(r'\{.*\}', cleaned_response, re.DOTALL)
+                if json_match:
+                    try:
+                        data = json.loads(json_match.group())
+                        logger.info("Successfully extracted JSON from wrapped response")
+                    except json.JSONDecodeError:
+                        logger.error("Failed to extract valid JSON from response")
+                        return [], []
+                else:
+                    logger.error("No JSON object found in response")
+                    return [], []
             
             entities = []
             relations = []
@@ -257,12 +301,9 @@ Rules:
             
             return entities, relations
             
-        except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse LLM JSON response: {str(e)}")
-            logger.debug(f"Response content: {response}")
-            return [], []
         except Exception as e:
             logger.error(f"Error parsing LLM response: {str(e)}")
+            logger.error(f"Response content: {repr(response)}")
             return [], []
     
     def validate_extraction(self, kg: KnowledgeGraph) -> Dict[str, Any]:

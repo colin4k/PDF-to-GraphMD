@@ -4,7 +4,7 @@ pyyaml>=6.0
 click>=8.0.0
 
 # PDF Processing (MinerU)
-magic-pdf>=0.6.0
+mineru>=2.0.6
 torch>=1.9.0
 torchvision>=0.10.0
 
@@ -12,11 +12,12 @@ torchvision>=0.10.0
 openai>=1.0.0
 tiktoken>=0.4.0
 
-# NLP Processing (spaCy)
-spacy>=3.4.0
+# NLP Processing (spaCy) - Updated for Python 3.12 compatibility
+spacy>=3.8.0,<4.0.0
 spacy-transformers>=1.1.0
-en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.4.1/en_core_web_sm-3.4.1-py3-none-any.whl
-zh-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/zh_core_web_sm-3.8.0/zh_core_web_sm-3.8.0-py3-none-any.whl
+# Note: spaCy models should be installed separately after spaCy installation
+# en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.4.1-py3-none-any.whl
+# zh-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/zh_core_web_sm-3.8.0/zh_core_web_sm-3.8.0-py3-none-any.whl
 
 # Graph Processing
 networkx>=2.8.0
@@ -41,3 +42,5 @@ mypy>=0.971
 # Optional: Enhanced JSON processing
 jsonschema>=4.0.0
 outlines>=0.0.12
+
+accelerate>=0.26.0

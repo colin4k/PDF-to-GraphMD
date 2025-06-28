@@ -1,2 +1,7 @@
 config.yaml
-像經濟學家一樣思考 (安．魯尼   Anne Rooney).pdf
+*.pdf
+logs/*
+obsidian_vault/*
+*.pyc
+pdf_to_graphmd.egg-info/*
+
