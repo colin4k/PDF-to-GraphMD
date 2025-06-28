@@ -24,6 +24,11 @@ class MinerUConfig:
     batch_size: int = 1
     vlm_backend: str = "vlm-transformers"  # 支持 magic-pdf 2.0.x 的 VLM 后端
     source: str = "local"  # mineru CLI 的 --source 参数
+    
+    # Cache settings
+    enable_cache: bool = True
+    cache_dir: Optional[str] = None  # If None, uses default ~/.cache/pdf_to_graphmd/mineru
+    cache_expire_days: int = 30  # Cache expiration time in days
 
 
 @dataclass

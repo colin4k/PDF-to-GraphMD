@@ -10,6 +10,7 @@ from typing import List, Optional
 from .main import create_processor, process_pdf_file, process_pdf_directory
 from .config import SystemConfig, ExtractionMethod, load_config
 from .utils import setup_logging
+from .parsers import MinerUParser
 
 
 def create_argument_parser() -> argparse.ArgumentParser:
@@ -154,6 +155,30 @@ Examples:
         help="Show processing statistics only (no actual processing)"
     )
     
+    # Cache management options
+    cache_group = parser.add_argument_group("Cache Management")
+    cache_group.add_argument(
+        "--cache-info",
+        action="store_true",
+        help="Show cache information and exit"
+    )
+    cache_group.add_argument(
+        "--clear-cache",
+        action="store_true",
+        help="Clear all cached results and exit"
+    )
+    cache_group.add_argument(
+        "--clear-cache-older-than",
+        type=int,
+        metavar="DAYS",
+        help="Clear cache entries older than specified days"
+    )
+    cache_group.add_argument(
+        "--disable-cache",
+        action="store_true",
+        help="Disable cache for this run"
+    )
+    
     parser.add_argument(
         "--version",
         action="version",
@@ -201,6 +226,10 @@ def override_config_with_args(config: SystemConfig, args: argparse.Namespace) ->
     # Logging
     if args.log_level:
         config.log_level = args.log_level
+    
+    # Cache settings
+    if args.disable_cache:
+        config.mineru.enable_cache = False
     
     return config
 
@@ -274,6 +303,52 @@ def print_processing_stats(results: List):
                 print(f"  - {result.source_file}: {result.error_message}")
 
 
+def handle_cache_commands(args: argparse.Namespace, config: SystemConfig) -> bool:
+    """
+    Handle cache-related commands
+    
+    Args:
+        args: Command line arguments
+        config: System configuration
+        
+    Returns:
+        True if a cache command was handled (and program should exit)
+    """
+    parser = MinerUParser(config.mineru)
+    
+    if args.cache_info:
+        cache_info = parser.get_cache_info()
+        print("🗄️  Cache Information:")
+        print(f"  Cache directory: {cache_info['cache_dir']}")
+        print(f"  Cache exists: {cache_info['exists']}")
+        
+        if cache_info['exists']:
+            print(f"  Number of cached files: {cache_info['file_count']}")
+            print(f"  Total cache size: {cache_info['total_size_mb']:.2f} MB")
+            
+            if cache_info['file_count'] > 0:
+                print("  Cached files:")
+                for file_info in cache_info['files']:
+                    print(f"    - {file_info['name']}: {file_info['size_mb']:.2f} MB (modified: {file_info['modified']})")
+        
+        return True
+    
+    if args.clear_cache:
+        print("🗑️  Clearing all cache...")
+        parser.clear_cache()
+        print("✓ Cache cleared successfully")
+        return True
+    
+    if args.clear_cache_older_than is not None:
+        days = args.clear_cache_older_than
+        print(f"🗑️  Clearing cache older than {days} days...")
+        parser.clear_cache(older_than_days=days)
+        print(f"✓ Cache entries older than {days} days cleared successfully")
+        return True
+    
+    return False
+
+
 def main():
     """Main CLI entry point"""
     
@@ -301,6 +376,10 @@ def main():
         # Load and override configuration
         config = load_config(args.config)
         config = override_config_with_args(config, args)
+        
+        # Handle cache commands
+        if handle_cache_commands(args, config):
+            return 0
         
         # Show configuration if stats only
         if args.stats_only:

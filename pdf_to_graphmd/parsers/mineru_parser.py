@@ -9,6 +9,9 @@ from typing import Dict, List, Optional, Any
 import tempfile
 import subprocess
 import shlex
+import hashlib
+import pickle
+from datetime import datetime
 
 from ..models import DocumentContent
 from ..config import MinerUConfig
@@ -22,6 +25,16 @@ class MinerUParser:
     
     def __init__(self, config: MinerUConfig):
         self.config = config
+        
+        # Setup cache directory
+        if config.cache_dir:
+            self.cache_dir = Path(config.cache_dir)
+        else:
+            self.cache_dir = Path.home() / ".cache" / "pdf_to_graphmd" / "mineru"
+        
+        if config.enable_cache:
+            self.cache_dir.mkdir(parents=True, exist_ok=True)
+        
         self._setup_environment()
     
     def _setup_environment(self):
@@ -57,6 +70,15 @@ class MinerUParser:
             if not pdf_path.exists():
                 raise FileNotFoundError(f"PDF file not found: {pdf_path}")
             
+            # Check cache first (if enabled)
+            if self.config.enable_cache:
+                cache_key = self._generate_cache_key(pdf_path)
+                cached_content = self._load_from_cache(cache_key)
+                
+                if cached_content:
+                    logger.info(f"Found cached result for: {pdf_path}, skipping MinerU execution")
+                    return cached_content
+            
             logger.info(f"Starting MinerU parsing for: {pdf_path}")
             
             # Create temporary directory for output
@@ -68,6 +90,10 @@ class MinerUParser:
                 
                 # Process results
                 content = self._process_mineru_output(result, temp_path)
+                
+                # Cache the result (if enabled)
+                if self.config.enable_cache:
+                    self._save_to_cache(cache_key, content)
                 
             logger.info(f"Successfully parsed PDF: {pdf_path}")
             return content
@@ -295,3 +321,143 @@ class MinerUParser:
                 ))
         
         return results
+    
+    def _generate_cache_key(self, pdf_path: Path) -> str:
+        """
+        Generate a unique cache key for a PDF file based on:
+        - File path
+        - File size
+        - Modification time
+        - MinerU configuration
+        """
+        # Get file stats
+        stat = pdf_path.stat()
+        file_info = f"{pdf_path}:{stat.st_size}:{stat.st_mtime}"
+        
+        # Include relevant config parameters that affect output
+        config_info = f"{self.config.language}:{self.config.vlm_backend}:{self.config.source}"
+        
+        # Create hash
+        combined = f"{file_info}:{config_info}"
+        return hashlib.md5(combined.encode()).hexdigest()
+    
+    def _get_cache_path(self, cache_key: str) -> Path:
+        """Get the cache file path for a given cache key"""
+        return self.cache_dir / f"{cache_key}.pkl"
+    
+    def _load_from_cache(self, cache_key: str) -> Optional[DocumentContent]:
+        """Load cached DocumentContent if available and valid"""
+        try:
+            cache_path = self._get_cache_path(cache_key)
+            
+            if not cache_path.exists():
+                logger.debug(f"No cache found for key: {cache_key}")
+                return None
+            
+            # Check cache age (configurable expiration)
+            cache_age_days = (datetime.now().timestamp() - cache_path.stat().st_mtime) / (24 * 3600)
+            if cache_age_days > self.config.cache_expire_days:
+                logger.debug(f"Cache expired for key: {cache_key} (age: {cache_age_days:.1f} days, limit: {self.config.cache_expire_days})")
+                cache_path.unlink()  # Remove expired cache
+                return None
+            
+            # Load cached content
+            with open(cache_path, 'rb') as f:
+                cached_content = pickle.load(f)
+            
+            logger.debug(f"Successfully loaded cached content for key: {cache_key}")
+            return cached_content
+            
+        except Exception as e:
+            logger.warning(f"Failed to load cache for key {cache_key}: {str(e)}")
+            # If cache loading fails, remove the corrupted cache file
+            try:
+                cache_path = self._get_cache_path(cache_key)
+                if cache_path.exists():
+                    cache_path.unlink()
+            except:
+                pass
+            return None
+    
+    def _save_to_cache(self, cache_key: str, content: DocumentContent):
+        """Save DocumentContent to cache"""
+        try:
+            cache_path = self._get_cache_path(cache_key)
+            
+            # Ensure cache directory exists
+            cache_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            # Save to cache
+            with open(cache_path, 'wb') as f:
+                pickle.dump(content, f)
+            
+            logger.debug(f"Successfully cached content for key: {cache_key}")
+            
+        except Exception as e:
+            logger.warning(f"Failed to save cache for key {cache_key}: {str(e)}")
+    
+    def clear_cache(self, older_than_days: Optional[int] = None):
+        """
+        Clear cached results
+        
+        Args:
+            older_than_days: If specified, only clear cache older than this many days
+        """
+        try:
+            if not self.cache_dir.exists():
+                return
+            
+            cleared_count = 0
+            current_time = datetime.now().timestamp()
+            
+            for cache_file in self.cache_dir.glob("*.pkl"):
+                should_delete = False
+                
+                if older_than_days is None:
+                    should_delete = True
+                else:
+                    file_age_days = (current_time - cache_file.stat().st_mtime) / (24 * 3600)
+                    if file_age_days > older_than_days:
+                        should_delete = True
+                
+                if should_delete:
+                    cache_file.unlink()
+                    cleared_count += 1
+            
+            logger.info(f"Cleared {cleared_count} cache files")
+            
+        except Exception as e:
+            logger.error(f"Failed to clear cache: {str(e)}")
+    
+    def get_cache_info(self) -> Dict[str, Any]:
+        """Get information about the current cache"""
+        try:
+            if not self.cache_dir.exists():
+                return {
+                    "cache_dir": str(self.cache_dir),
+                    "exists": False,
+                    "file_count": 0,
+                    "total_size_mb": 0
+                }
+            
+            cache_files = list(self.cache_dir.glob("*.pkl"))
+            total_size = sum(f.stat().st_size for f in cache_files)
+            
+            return {
+                "cache_dir": str(self.cache_dir),
+                "exists": True,
+                "file_count": len(cache_files),
+                "total_size_mb": total_size / (1024 * 1024),
+                "files": [
+                    {
+                        "name": f.name,
+                        "size_mb": f.stat().st_size / (1024 * 1024),
+                        "modified": datetime.fromtimestamp(f.stat().st_mtime).isoformat()
+                    }
+                    for f in cache_files
+                ]
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to get cache info: {str(e)}")
+            return {"error": str(e)}
