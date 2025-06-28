@@ -151,7 +151,7 @@ class ObsidianNote:
         # Add content
         lines.append(self.content)
         
-        return "\\n".join(lines)
+        return "\n".join(lines)
     
     def save(self, output_dir: Path):
         """Save note to file"""

@@ -67,10 +67,10 @@
     # Language-specific prompt templates
     language_prompts:
       zh:
-        system_prompt: "你是一个专业的知识提取和图谱构建系统。请用中文生成内容。"
-        entity_prompt: "从以下文本中提取实体，并用中文描述："
-        relation_prompt: "分析实体之间的关系，并用中文表达："
-        markdown_format_instruction: "生成符合Obsidian格式的中文markdown文档，使用[[]]格式标记关键概念链接。"
+        system_prompt: "你是一个专业的知识提取和图谱构建系统。请用简体中文生成内容。"
+        entity_prompt: "从以下文本中提取实体，并用简体中文描述："
+        relation_prompt: "分析实体之间的关系，并用简体中文表达："
+        markdown_format_instruction: "生成符合Obsidian格式的简体中文markdown文档，使用[[]]格式标记关键概念链接。"
       en:
         system_prompt: "You are a professional knowledge extraction and graph construction system. Please generate content in English."
         entity_prompt: "Extract entities from the following text and describe in English:"
