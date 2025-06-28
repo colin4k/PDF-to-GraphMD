@@ -26,7 +26,8 @@ class Entity:
     id: str
     name: str
     type: str
-    description: str = ""
+    description: str = ""  # 详细描述，用于"描述"部分
+    brief_definition: str = ""  # 简短定义，用于"定义"部分
     aliases: List[str] = field(default_factory=list)
     attributes: Dict[str, Any] = field(default_factory=dict)
     source_documents: List[str] = field(default_factory=list)
@@ -61,6 +62,14 @@ class Entity:
         # Convert traditional Chinese to simplified Chinese
         converter = opencc.OpenCC('t2s')  # traditional to simplified
         return converter.convert(self.description)
+    
+    def get_simplified_brief_definition(self) -> str:
+        """Get simplified Chinese brief definition"""
+        import opencc
+        
+        # Convert traditional Chinese to simplified Chinese
+        converter = opencc.OpenCC('t2s')  # traditional to simplified
+        return converter.convert(self.brief_definition)
 
 
 @dataclass

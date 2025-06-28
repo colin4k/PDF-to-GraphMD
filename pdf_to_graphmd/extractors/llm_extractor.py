@@ -195,7 +195,7 @@ class LLMExtractor:
             entity_prompt = "Extract entities from the following text:"
             relation_prompt = "Analyze relationships between entities:"
         
-        if self.output_config and getattr(self.output_config, 'language', 'en') == 'zh':
+        if self.output_config and getattr(self.output_config, 'language', 'en') == 'chs':
             # Chinese prompts
             system_prompt = f"""{base_system_prompt}你是一个专业的知识图谱分析系统。你的任务是分析文本内容，提取知识点并建立它们之间的连接。
 
@@ -222,7 +222,8 @@ class LLMExtractor:
       "id": "唯一标识符",
       "name": "实体名称",
       "type": "实体类型",
-      "description": "详细描述（在描述中使用[[]]语法链接到其他相关实体）",
+      "brief_definition": "简短定义（1-2句话的基本定义，可包含[[]]链接）",
+      "description": "详细结构化描述（包含多个子部分，如背景、贡献、影响、局限性等，积极使用[[]]语法链接）",
       "aliases": ["别名1", "别名2"]
     }}
   ],
@@ -239,27 +240,37 @@ class LLMExtractor:
 
 规则：
 1. 提取所有重要知识点作为实体，构建丰富的知识网络
-2. **在实体描述中主动使用[[实体名称]]格式链接到其他相关实体**
+2. **区分brief_definition和description：**
+   - **brief_definition**：1-2句话的简洁定义，说明这是什么，可包含关键的[[]]链接
+   - **description**：详细的结构化内容，包含多个方面（如背景、贡献、影响、局限性等），积极使用[[]]链接
 3. 使用描述性但简洁的实体ID
 4. 确保关系中的所有实体ID都存在于实体列表中
 5. 根据清晰度分配置信度分数（0.0-1.0）
 6. 如果提到替代名称，请在别名中包含
 7. **🚨 重要：所有中文内容必须使用简体中文，绝对禁止繁体字**
-8. **🚨 重要：在描述中积极建立[[]]链接，体现知识点之间的关系**
+8. **🚨 重要：在brief_definition和description中都要积极建立[[]]链接**
 9. **积极寻找实体间的各种关系，构建连通的知识图谱**
 10. **输出前检查：确保没有出现經濟、設備、時間、應該、導致等繁体字**
-11. **输出前检查：确保没有[cite:start]等非标准语法**"""
+11. **输出前检查：确保没有[cite:start]等非标准语法**
 
-            user_prompt = f"""利用知识图谱来分析以下文本，提取每个知识点的定义及描述，并在描述中使用Obsidian支持的"[[]]"语法来建立知识点之间的连接。
+**内容格式示例：**
+- brief_definition: "伏尔泰（1694-1778）是法国[[启蒙运动]]的旗手、哲学家、历史学家和文学家。"
+- description: "### 对历史学的贡献\n1. **[[历史]]的世俗化**：伏尔泰的著作...标志着与传统宗教史学的决裂...\n2. **批判中世纪**：他将[[中世纪]]描绘成..."（包含结构化子部分）"""
+
+            user_prompt = f"""利用知识图谱来分析以下文本，提取每个知识点的简短定义和详细描述，并在两者中都使用Obsidian支持的"[[]]"语法来建立知识点之间的连接。
 
 **特别要求：**
 1. 提取所有重要概念、人物、组织、地点等作为实体
-2. 在实体描述中主动使用[[]]语法链接相关知识点
-3. 如果文本是繁体中文，需要转换为符合简体中文语境的简体中文文本
-4. **🚨 关键：必须用标准简体中文输出所有内容**
-5. **🚨 关键：禁止使用任何繁体字（如經濟、設備、時間等）**
-6. **🚨 关键：在描述中积极建立[[]]双向链接**
-7. **不要包含如[cite:start]或[cite:1]等非markdown语法的内容**
+2. **为每个实体生成两种不同的内容：**
+   - **brief_definition**：1-2句话的简洁定义，说明这是什么
+   - **description**：详细的结构化描述，包含多个方面和子部分，类似维基百科的格式
+3. 在brief_definition和description中都要主动使用[[]]语法链接相关知识点
+4. description应该包含结构化的子部分，如背景、贡献、影响、局限性等，使用markdown格式
+5. 如果文本是繁体中文，需要转换为符合简体中文语境的简体中文文本
+6. **🚨 关键：必须用标准简体中文输出所有内容**
+7. **🚨 关键：禁止使用任何繁体字（如經濟、設備、時間等）**
+8. **🚨 关键：在brief_definition和description中积极建立[[]]双向链接**
+9. **不要包含如[cite:start]或[cite:1]等非markdown语法的内容**
 
 文本内容：
 {text}"""
@@ -393,6 +404,7 @@ Rules:
                     name=entity_data.get("name", ""),
                     type=entity_data.get("type", ""),
                     description=entity_data.get("description", ""),
+                    brief_definition=entity_data.get("brief_definition", ""),
                     aliases=entity_data.get("aliases", []),
                     confidence=entity_data.get("confidence", 1.0)
                 )

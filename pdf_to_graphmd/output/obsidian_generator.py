@@ -106,10 +106,10 @@ class ObsidianGenerator:
         content_parts.append(f"# {entity.get_simplified_name()}")
         content_parts.append("")
         
-        # Add description with proper structure (LLM already includes [[]] links)
-        if entity.description:
+        # Add brief definition (LLM already includes [[]] links)
+        if entity.brief_definition:
             content_parts.append("## 定义")
-            content_parts.append(entity.get_simplified_description())
+            content_parts.append(entity.get_simplified_brief_definition())
             content_parts.append("")
         
         # Get relations for this entity
@@ -123,7 +123,7 @@ class ObsidianGenerator:
             content_parts.append("## Description")
         content_parts.append("")
         
-        # Add the entity's main description if available (this may already contain [[]] links from LLM)
+        # Add the entity's detailed description if available (this may already contain [[]] links from LLM)
         if entity.description:
             # Get simplified description and process it to ensure proper double linking
             simplified_description = entity.get_simplified_description()
