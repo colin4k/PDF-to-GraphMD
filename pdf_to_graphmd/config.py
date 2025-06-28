@@ -41,6 +41,7 @@ class LLMConfig:
     max_tokens: int = 4000
     force_json: bool = True
     system_prompt: str = "You are an expert knowledge extraction system."
+    max_retries: int = 3
 
 
 @dataclass

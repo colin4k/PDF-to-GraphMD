@@ -128,29 +128,45 @@ class LLMExtractor:
         return chunks
     
     def _extract_from_chunk(self, text_chunk: str) -> Tuple[List[Entity], List[Relation]]:
-        """Extract entities and relations from a text chunk using LLM"""
-        try:
-            logger.info(f"Extracting from chunk (length: {len(text_chunk)} chars)")
-            logger.debug(f"Chunk preview: {text_chunk[:200]}...")
-            
-            # Create extraction prompt
-            prompt = self._create_extraction_prompt(text_chunk)
-            
-            # Call LLM
-            logger.info("Calling LLM API...")
-            response = self._call_llm(prompt)
-            logger.info(f"LLM response received (length: {len(response)} chars)")
-            logger.debug(f"LLM response preview: {response[:500]}...")
-            
-            # Parse response
-            entities, relations = self._parse_llm_response(response)
-            logger.info(f"Parsed {len(entities)} entities and {len(relations)} relations from chunk")
-            
-            return entities, relations
-            
-        except Exception as e:
-            logger.error(f"Error extracting from chunk: {str(e)}")
-            return [], []
+        """Extract entities and relations from a text chunk using LLM with retry mechanism"""
+        logger.info(f"Extracting from chunk (length: {len(text_chunk)} chars)")
+        logger.debug(f"Chunk preview: {text_chunk[:200]}...")
+        
+        # Create extraction prompt
+        prompt = self._create_extraction_prompt(text_chunk)
+        
+        max_retries = self.llm_config.max_retries
+        
+        for attempt in range(max_retries):
+            try:
+                logger.info(f"Attempt {attempt + 1}/{max_retries}: Calling LLM API...")
+                response = self._call_llm(prompt)
+                logger.info(f"LLM response received (length: {len(response)} chars)")
+                logger.debug(f"LLM response preview: {response[:500]}...")
+                
+                # Parse response
+                entities, relations = self._parse_llm_response(response)
+                logger.info(f"Parsed {len(entities)} entities and {len(relations)} relations from chunk")
+                
+                return entities, relations
+                
+            except json.JSONDecodeError as e:
+                logger.warning(f"Attempt {attempt + 1}/{max_retries} failed with JSON decode error: {str(e)}")
+                if attempt == max_retries - 1:
+                    logger.error(f"All {max_retries} attempts failed due to JSON decode errors")
+                    return [], []
+                else:
+                    logger.info(f"Retrying... ({max_retries - attempt - 1} attempts remaining)")
+                    
+            except Exception as e:
+                logger.error(f"Error extracting from chunk on attempt {attempt + 1}: {str(e)}")
+                if attempt == max_retries - 1:
+                    logger.error(f"All {max_retries} attempts failed")
+                    return [], []
+                else:
+                    logger.info(f"Retrying... ({max_retries - attempt - 1} attempts remaining)")
+        
+        return [], []
     
     def _create_extraction_prompt(self, text: str) -> str:
         """Create structured prompt for knowledge extraction"""
@@ -297,43 +313,45 @@ Rules:
     
     def _parse_llm_response(self, response: str) -> Tuple[List[Entity], List[Relation]]:
         """Parse LLM response and create Entity/Relation objects"""
+        # Log the raw response for debugging
+        logger.debug(f"Raw LLM response: {repr(response)}")
+        
+        # Clean response (remove markdown formatting if present)
+        cleaned_response = response.strip()
+        if cleaned_response.startswith("```json"):
+            cleaned_response = cleaned_response[7:]
+        if cleaned_response.endswith("```"):
+            cleaned_response = cleaned_response[:-3]
+        
+        # Check if response is empty or whitespace only
+        if not cleaned_response or cleaned_response.isspace():
+            logger.warning("LLM response is empty or whitespace only")
+            raise json.JSONDecodeError("Empty or whitespace-only response", cleaned_response, 0)
+        
+        # Try to parse JSON - let JSONDecodeError propagate for retry mechanism
         try:
-            # Log the raw response for debugging
-            logger.debug(f"Raw LLM response: {repr(response)}")
+            data = json.loads(cleaned_response)
+        except json.JSONDecodeError as e:
+            logger.error(f"JSON decode error: {str(e)}")
+            logger.error(f"Cleaned response: {repr(cleaned_response)}")
             
-            # Clean response (remove markdown formatting if present)
-            cleaned_response = response.strip()
-            if cleaned_response.startswith("```json"):
-                cleaned_response = cleaned_response[7:]
-            if cleaned_response.endswith("```"):
-                cleaned_response = cleaned_response[:-3]
-            
-            # Check if response is empty or whitespace only
-            if not cleaned_response or cleaned_response.isspace():
-                logger.warning("LLM response is empty or whitespace only")
-                return [], []
-            
-            # Try to parse JSON
-            try:
-                data = json.loads(cleaned_response)
-            except json.JSONDecodeError as e:
-                logger.error(f"JSON decode error: {str(e)}")
-                logger.error(f"Cleaned response: {repr(cleaned_response)}")
-                
-                # Try to extract JSON from the response if it's wrapped in other text
-                import re
-                json_match = re.search(r'\{.*\}', cleaned_response, re.DOTALL)
-                if json_match:
-                    try:
-                        data = json.loads(json_match.group())
-                        logger.info("Successfully extracted JSON from wrapped response")
-                    except json.JSONDecodeError:
-                        logger.error("Failed to extract valid JSON from response")
-                        return [], []
-                else:
-                    logger.error("No JSON object found in response")
-                    return [], []
-            
+            # Try to extract JSON from the response if it's wrapped in other text
+            import re
+            json_match = re.search(r'\{.*\}', cleaned_response, re.DOTALL)
+            if json_match:
+                try:
+                    data = json.loads(json_match.group())
+                    logger.info("Successfully extracted JSON from wrapped response")
+                except json.JSONDecodeError:
+                    logger.error("Failed to extract valid JSON from response")
+                    # Re-raise the original error for retry mechanism
+                    raise e
+            else:
+                logger.error("No JSON object found in response")
+                # Re-raise the original error for retry mechanism
+                raise e
+        
+        try:
             entities = []
             relations = []
             
@@ -363,9 +381,9 @@ Rules:
             return entities, relations
             
         except Exception as e:
-            logger.error(f"Error parsing LLM response: {str(e)}")
-            logger.error(f"Response content: {repr(response)}")
-            return [], []
+            logger.error(f"Error creating entities/relations from parsed JSON: {str(e)}")
+            logger.error(f"Parsed data: {repr(data)}")
+            raise
     
     def validate_extraction(self, kg: KnowledgeGraph) -> Dict[str, Any]:
         """Validate extracted knowledge graph"""

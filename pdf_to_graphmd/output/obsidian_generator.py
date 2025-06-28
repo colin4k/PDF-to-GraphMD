@@ -106,38 +106,42 @@ class ObsidianGenerator:
         content_parts.append(f"# {entity.name}")
         content_parts.append("")
         
-        # Add description
+        # Add description with proper structure
         if entity.description:
+            content_parts.append("## 定义")
             content_parts.append(entity.description)
             content_parts.append("")
         
         # Get relations for this entity
         outgoing_relations, incoming_relations = knowledge_graph.get_entity_relations(entity.id)
         
-        # Add outgoing relations with language-aware headers
-        if outgoing_relations:
+        # Add description section with detailed content
+        if outgoing_relations or entity.description:
             language = getattr(self.output_config, 'language', 'en')
             if language == 'zh':
-                content_parts.append("## 相关链接")
+                content_parts.append("## 描述")
             else:
-                content_parts.append("## Related Links")
+                content_parts.append("## Description")
             content_parts.append("")
             
-            # Group relations by type
+            # Group relations by type for better organization
             relation_groups = {}
             for relation in outgoing_relations:
                 if relation.relation_type not in relation_groups:
                     relation_groups[relation.relation_type] = []
                 relation_groups[relation.relation_type].append(relation)
             
+            # Create subsections for each relation type
             for relation_type, relations in relation_groups.items():
                 content_parts.append(f"### {self._format_relation_type(relation_type)}")
                 for relation in relations:
                     target_entity = knowledge_graph.entities.get(relation.target_entity)
                     if target_entity:
-                        content_parts.append(f"- [[{target_entity.normalize_id()}|{target_entity.name}]]")
+                        # Create descriptive bullet points with wikilinks
                         if relation.description:
-                            content_parts.append(f"  - {relation.description}")
+                            content_parts.append(f"* **{self._format_relation_descriptor(relation_type)}**：{relation.description}，涉及[[{target_entity.normalize_id()}|{target_entity.name}]] 。")
+                        else:
+                            content_parts.append(f"* 与[[{target_entity.normalize_id()}|{target_entity.name}]]存在{self._format_relation_type(relation_type)}关系 。")
                 content_parts.append("")
         
         # Add incoming relations (backlinks)
@@ -179,9 +183,9 @@ class ObsidianGenerator:
         note = ObsidianNote(
             filename=filename,
             title=entity.name,
-            content="\\n".join(content_parts),
+            content="\n".join(content_parts),
             frontmatter=frontmatter,
-            links=self._extract_links_from_content("\\n".join(content_parts))
+            links=self._extract_links_from_content("\n".join(content_parts))
         )
         
         return note
@@ -255,9 +259,9 @@ class ObsidianGenerator:
         note = ObsidianNote(
             filename=f"index{self.output_config.file_extension}",
             title="知识图谱索引",
-            content="\\n".join(content_parts),
+            content="\n".join(content_parts),
             frontmatter=frontmatter,
-            links=self._extract_links_from_content("\\n".join(content_parts))
+            links=self._extract_links_from_content("\n".join(content_parts))
         )
         
         return note
@@ -362,6 +366,25 @@ class ObsidianGenerator:
         }
         
         return mappings.get(formatted, formatted)
+    
+    def _format_relation_descriptor(self, relation_type: str) -> str:
+        """Format relation type as a descriptive phrase for bullet points"""
+        # Convert snake_case to descriptive phrases
+        mappings = {
+            "defined_as": "定义特征",
+            "part_of": "归属关系",
+            "related_to": "相关联系",
+            "proposed_by": "提出背景",
+            "used_in": "应用场景",
+            "applies_to": "适用范围",
+            "causes": "因果关系",
+            "results_in": "结果影响",
+            "depends_on": "依赖关系",
+            "extends": "扩展发展"
+        }
+        
+        formatted = relation_type.replace('_', ' ').title()
+        return mappings.get(relation_type.lower(), formatted)
     
     def _extract_links_from_content(self, content: str) -> List[str]:
         """Extract wiki-style links from content"""
