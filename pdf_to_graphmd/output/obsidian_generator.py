@@ -164,7 +164,10 @@ class ObsidianGenerator:
                 for relation in relations:
                     source_entity = knowledge_graph.entities.get(relation.source_entity)
                     if source_entity:
-                        content_parts.append(f"- [[{source_entity.normalize_id()}|{source_entity.name}]]")
+                        if relation.description:
+                            content_parts.append(f"- [[{source_entity.normalize_id()}|{source_entity.name}]] - {relation.description}")
+                        else:
+                            content_parts.append(f"- [[{source_entity.normalize_id()}|{source_entity.name}]]")
                 content_parts.append("")
         
         # Add embedded content (tables, formulas, images)
@@ -178,6 +181,32 @@ class ObsidianGenerator:
                     content_parts.append("## Related Content")
                 content_parts.append("")
                 content_parts.extend(embedded_content)
+        
+        # Add see also section with all related entities
+        all_related_entities = set()
+        for relation in outgoing_relations:
+            target = knowledge_graph.entities.get(relation.target_entity)
+            if target:
+                all_related_entities.add((target.normalize_id(), target.name))
+        
+        for relation in incoming_relations:
+            source = knowledge_graph.entities.get(relation.source_entity)
+            if source:
+                all_related_entities.add((source.normalize_id(), source.name))
+        
+        if all_related_entities:
+            language = getattr(self.output_config, 'language', 'en')
+            if language == 'zh':
+                content_parts.append("## 相关链接")
+            else:
+                content_parts.append("## See Also")
+            content_parts.append("")
+            
+            # Sort related entities alphabetically
+            sorted_entities = sorted(all_related_entities, key=lambda x: x[1])
+            for entity_id, entity_name in sorted_entities:
+                content_parts.append(f"- [[{entity_id}|{entity_name}]]")
+            content_parts.append("")
         
         # Create note
         note = ObsidianNote(

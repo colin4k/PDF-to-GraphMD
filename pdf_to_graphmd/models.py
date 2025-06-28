@@ -34,8 +34,14 @@ class Entity:
     
     def normalize_id(self) -> str:
         """Generate normalized entity ID for filename"""
+        import opencc
+        
+        # Convert traditional Chinese to simplified Chinese
+        converter = opencc.OpenCC('t2s')  # traditional to simplified
+        simplified_name = converter.convert(self.name)
+        
         # Replace special characters and spaces
-        normalized = self.name.replace(" ", "_").replace("/", "_").replace("\\", "_")
+        normalized = simplified_name.replace(" ", "_").replace("/", "_").replace("\\", "_")
         # Remove other problematic characters
         normalized = "".join(c for c in normalized if c.isalnum() or c in "_-.")
         return normalized
@@ -144,11 +150,7 @@ class ObsidianNote:
             lines.append("---")
             lines.append("")
         
-        # Add title
-        lines.append(f"# {self.title}")
-        lines.append("")
-        
-        # Add content
+        # Add content (content already includes title)
         lines.append(self.content)
         
         return "\n".join(lines)
