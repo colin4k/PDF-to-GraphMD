@@ -106,10 +106,11 @@ class ObsidianGenerator:
         content_parts.append(f"# {entity.name}")
         content_parts.append("")
         
-        # Add description with proper structure
+        # Add description with proper structure and auto-linked entities
         if entity.description:
             content_parts.append("## 定义")
-            content_parts.append(entity.description)
+            linked_description = self._auto_link_entities(entity.description, knowledge_graph, entity.id)
+            content_parts.append(linked_description)
             content_parts.append("")
         
         # Get relations for this entity
@@ -137,9 +138,10 @@ class ObsidianGenerator:
                 for relation in relations:
                     target_entity = knowledge_graph.entities.get(relation.target_entity)
                     if target_entity:
-                        # Create descriptive bullet points with wikilinks
+                        # Create descriptive bullet points with auto-linked descriptions
                         if relation.description:
-                            content_parts.append(f"* **{self._format_relation_descriptor(relation_type)}**：{relation.description}，涉及[[{target_entity.normalize_id()}|{target_entity.name}]] 。")
+                            linked_description = self._auto_link_entities(relation.description, knowledge_graph, entity.id)
+                            content_parts.append(f"* **{self._format_relation_descriptor(relation_type)}**：{linked_description}，涉及[[{target_entity.normalize_id()}|{target_entity.name}]] 。")
                         else:
                             content_parts.append(f"* 与[[{target_entity.normalize_id()}|{target_entity.name}]]存在{self._format_relation_type(relation_type)}关系 。")
                 content_parts.append("")
@@ -165,7 +167,8 @@ class ObsidianGenerator:
                     source_entity = knowledge_graph.entities.get(relation.source_entity)
                     if source_entity:
                         if relation.description:
-                            content_parts.append(f"- [[{source_entity.normalize_id()}|{source_entity.name}]] - {relation.description}")
+                            linked_description = self._auto_link_entities(relation.description, knowledge_graph, entity.id)
+                            content_parts.append(f"- [[{source_entity.normalize_id()}|{source_entity.name}]] - {linked_description}")
                         else:
                             content_parts.append(f"- [[{source_entity.normalize_id()}|{source_entity.name}]]")
                 content_parts.append("")
@@ -222,6 +225,50 @@ class ObsidianGenerator:
         )
         
         return note
+    
+    def _auto_link_entities(self, text: str, knowledge_graph: KnowledgeGraph, current_entity_id: str) -> str:
+        """Automatically create links for entity mentions in text"""
+        if not text:
+            return text
+        
+        linked_text = text
+        
+        # Create a list of entities sorted by name length (longest first) to avoid partial matches
+        entities_to_check = []
+        for entity_id, entity in knowledge_graph.entities.items():
+            if entity_id != current_entity_id:  # Don't link to self
+                entities_to_check.append((entity.name, entity.normalize_id(), entity_id))
+                # Also check aliases
+                for alias in entity.aliases:
+                    if alias and alias != entity.name:
+                        entities_to_check.append((alias, entity.normalize_id(), entity_id))
+        
+        # Sort by length (longest first) to avoid partial matching issues
+        entities_to_check.sort(key=lambda x: len(x[0]), reverse=True)
+        
+        # Track which entities we've already linked to avoid duplicate links
+        already_linked = set()
+        
+        for entity_name, normalized_id, entity_id in entities_to_check:
+            if entity_id in already_linked:
+                continue
+                
+            # Skip very short names to avoid false positives
+            if len(entity_name.strip()) < 2:
+                continue
+            
+            # Use word boundary matching to avoid partial matches
+            import re
+            # Create pattern that matches the entity name as a whole word/phrase
+            pattern = r'\b' + re.escape(entity_name) + r'\b'
+            
+            if re.search(pattern, linked_text):
+                # Replace with wiki link, but only the first occurrence to avoid cluttering
+                replacement = f"[[{normalized_id}|{entity_name}]]"
+                linked_text = re.sub(pattern, replacement, linked_text, count=1)
+                already_linked.add(entity_id)
+        
+        return linked_text
     
     def _find_semantic_links(self, entity: Entity, knowledge_graph: KnowledgeGraph, 
                            existing_relations: Set[Tuple[str, str]]) -> Set[Tuple[str, str]]:
