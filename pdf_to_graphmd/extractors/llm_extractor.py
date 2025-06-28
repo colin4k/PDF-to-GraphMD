@@ -25,18 +25,47 @@ class LLMExtractor:
         self._setup_client()
     
     def _setup_client(self):
-        """Setup LLM client (OpenAI-compatible)"""
+        """Setup LLM client (OpenAI-compatible or Google native)"""
         try:
-            from openai import OpenAI
+            if self.llm_config.api_provider == "openai":
+                # Setup OpenAI-compatible client
+                from openai import OpenAI
+                
+                self.client = OpenAI(
+                    api_key=self.llm_config.api_key,
+                    base_url=self.llm_config.base_url
+                )
+                self.api_type = "openai"
+                logger.info(f"OpenAI-compatible client initialized with model: {self.llm_config.model_name}")
+                
+            elif self.llm_config.api_provider == "google":
+                # Setup Google AI client
+                import google.generativeai as genai
+                import os
+                
+                # Get API key from config or environment
+                api_key = self.llm_config.google_api_key or os.getenv('GOOGLE_API_KEY')
+                if not api_key:
+                    raise ValueError("Google API key not found in config or environment variable GOOGLE_API_KEY")
+                
+                # Configure Google AI
+                genai.configure(api_key=api_key)
+                
+                # Initialize the model
+                self.client = genai.GenerativeModel(self.llm_config.google_model_name)
+                self.api_type = "google"
+                logger.info(f"Google AI client initialized with model: {self.llm_config.google_model_name}")
+                
+            else:
+                raise ValueError(f"Unsupported API provider: {self.llm_config.api_provider}")
             
-            self.client = OpenAI(
-                api_key=self.llm_config.api_key,
-                base_url=self.llm_config.base_url
-            )
-            logger.info(f"LLM client initialized with model: {self.llm_config.model_name}")
-            
-        except ImportError:
-            logger.error("OpenAI library not found. Please install: pip install openai")
+        except ImportError as e:
+            if "openai" in str(e):
+                logger.error("OpenAI library not found. Please install: pip install openai")
+            elif "google" in str(e):
+                logger.error("Google AI library not found. Please install: pip install google-generativeai")
+            else:
+                logger.error(f"Required library not found: {str(e)}")
             raise
         except Exception as e:
             logger.error(f"Failed to initialize LLM client: {str(e)}")
@@ -320,29 +349,77 @@ Rules:
     def _call_llm(self, messages: List[Dict[str, str]]) -> str:
         """Call LLM API with structured prompts"""
         try:
-            logger.info(f"Calling LLM with model: {self.llm_config.model_name}")
-            logger.debug(f"Messages: {messages}")
-            
-            if self.llm_config.force_json:
-                # Use JSON mode if available
-                logger.info("Using JSON response format")
-                response = self.client.chat.completions.create(
-                    model=self.llm_config.model_name,
-                    messages=messages,
-                    temperature=self.llm_config.temperature,
-                    max_tokens=self.llm_config.max_tokens,
-                    response_format={"type": "json_object"}
+            if self.api_type == "openai":
+                # OpenAI-compatible API call
+                logger.info(f"Calling OpenAI-compatible API with model: {self.llm_config.model_name}")
+                logger.debug(f"Messages: {messages}")
+                
+                if self.llm_config.force_json:
+                    # Use JSON mode if available
+                    logger.info("Using JSON response format")
+                    response = self.client.chat.completions.create(
+                        model=self.llm_config.model_name,
+                        messages=messages,
+                        temperature=self.llm_config.temperature,
+                        max_tokens=self.llm_config.max_tokens,
+                        response_format={"type": "json_object"}
+                    )
+                else:
+                    logger.info("Using standard response format")
+                    response = self.client.chat.completions.create(
+                        model=self.llm_config.model_name,
+                        messages=messages,
+                        temperature=self.llm_config.temperature,
+                        max_tokens=self.llm_config.max_tokens
+                    )
+                
+                content = response.choices[0].message.content
+                
+            elif self.api_type == "google":
+                # Google AI native API call
+                logger.info(f"Calling Google native API with model: {self.llm_config.google_model_name}")
+                logger.debug(f"Messages: {messages}")
+                
+                # Convert messages to Google format
+                system_instruction = None
+                user_content = ""
+                
+                for message in messages:
+                    if message["role"] == "system":
+                        system_instruction = message["content"]
+                    elif message["role"] == "user":
+                        user_content = message["content"]
+                
+                # Configure generation config
+                generation_config = {
+                    "temperature": self.llm_config.temperature,
+                    "max_output_tokens": self.llm_config.max_tokens,
+                }
+                
+                if self.llm_config.force_json:
+                    generation_config["response_mime_type"] = "application/json"
+                
+                # Create new model instance with system instruction if provided
+                if system_instruction:
+                    import google.generativeai as genai
+                    model = genai.GenerativeModel(
+                        model_name=self.llm_config.google_model_name,
+                        system_instruction=system_instruction
+                    )
+                else:
+                    model = self.client
+                
+                # Make the API call
+                response = model.generate_content(
+                    user_content,
+                    generation_config=generation_config
                 )
+                
+                content = response.text
+                
             else:
-                logger.info("Using standard response format")
-                response = self.client.chat.completions.create(
-                    model=self.llm_config.model_name,
-                    messages=messages,
-                    temperature=self.llm_config.temperature,
-                    max_tokens=self.llm_config.max_tokens
-                )
+                raise ValueError(f"Unknown API type: {self.api_type}")
             
-            content = response.choices[0].message.content
             logger.info(f"LLM API call successful, response length: {len(content)}")
             return content
             
@@ -351,6 +428,9 @@ Rules:
             logger.error(f"Error type: {type(e).__name__}")
             if hasattr(e, 'response'):
                 logger.error(f"API response: {e.response}")
+            # Check for Google-specific errors
+            if "google" in str(type(e).__module__):
+                logger.error("Google AI API error - check API key, model name, and quota")
             raise
     
     def _parse_llm_response(self, response: str) -> Tuple[List[Entity], List[Relation]]:

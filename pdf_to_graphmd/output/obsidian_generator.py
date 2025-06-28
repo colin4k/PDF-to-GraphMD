@@ -4,7 +4,7 @@ Obsidian-compatible Markdown file generation module
 import os
 import logging
 from pathlib import Path
-from typing import Dict, List, Optional, Set, Any, Tuple
+from typing import Dict, List, Optional, Any
 import yaml
 import re
 from datetime import datetime
@@ -112,9 +112,6 @@ class ObsidianGenerator:
             content_parts.append(entity.get_simplified_brief_definition())
             content_parts.append("")
         
-        # Get relations for this entity
-        outgoing_relations, incoming_relations = knowledge_graph.get_entity_relations(entity.id)
-        
         # Add description section with detailed content
         language = getattr(self.output_config, 'language', 'chs')
         if language == 'chs':
@@ -131,62 +128,6 @@ class ObsidianGenerator:
             content_parts.append(processed_description)
             content_parts.append("")
         
-        # Add relation-based content if there are outgoing relations
-        if outgoing_relations:
-            # Group relations by type for better organization
-            relation_groups = {}
-            for relation in outgoing_relations:
-                if relation.relation_type not in relation_groups:
-                    relation_groups[relation.relation_type] = []
-                relation_groups[relation.relation_type].append(relation)
-            
-            # Create subsections for each relation type
-            for relation_type, relations in relation_groups.items():
-                content_parts.append(f"### {self._format_relation_type(relation_type)}")
-                for relation in relations:
-                    target_entity = knowledge_graph.entities.get(relation.target_entity)
-                    if target_entity:
-                        # Create descriptive bullet points (LLM already includes [[]] links)
-                        if relation.description:
-                            # Convert relation description to simplified Chinese
-                            import opencc
-                            converter = opencc.OpenCC('t2s')
-                            simplified_desc = converter.convert(relation.description)
-                            content_parts.append(f"* **{self._format_relation_descriptor(relation_type)}**：{simplified_desc}，涉及[[{target_entity.get_simplified_name()}]] 。")
-                        else:
-                            content_parts.append(f"* 与[[{target_entity.get_simplified_name()}]]存在{self._format_relation_type(relation_type)}关系 。")
-                content_parts.append("")
-        
-        # Add incoming relations (backlinks)
-        if incoming_relations:
-            language = getattr(self.output_config, 'language', 'chs')
-            if language == 'chs':
-                content_parts.append("## 被引用")
-            else:
-                content_parts.append("## Referenced By")
-            content_parts.append("")
-            
-            relation_groups = {}
-            for relation in incoming_relations:
-                if relation.relation_type not in relation_groups:
-                    relation_groups[relation.relation_type] = []
-                relation_groups[relation.relation_type].append(relation)
-            
-            for relation_type, relations in relation_groups.items():
-                content_parts.append(f"### {self._format_relation_type(relation_type)}")
-                for relation in relations:
-                    source_entity = knowledge_graph.entities.get(relation.source_entity)
-                    if source_entity:
-                        if relation.description:
-                            # Convert relation description to simplified Chinese
-                            import opencc
-                            converter = opencc.OpenCC('t2s')
-                            simplified_desc = converter.convert(relation.description)
-                            content_parts.append(f"- [[{source_entity.get_simplified_name()}]] - {simplified_desc}")
-                        else:
-                            content_parts.append(f"- [[{source_entity.get_simplified_name()}]]")
-                content_parts.append("")
-        
         # Add embedded content (tables, formulas, images)
         if document_content:
             embedded_content = self._get_embedded_content_for_entity(entity, document_content)
@@ -199,43 +140,6 @@ class ObsidianGenerator:
                 content_parts.append("")
                 content_parts.extend(embedded_content)
         
-        # Add see also section with all related entities and semantic suggestions
-        all_related_entity_ids = set()
-        for relation in outgoing_relations:
-            target = knowledge_graph.entities.get(relation.target_entity)
-            if target:
-                all_related_entity_ids.add(target.id)
-        
-        for relation in incoming_relations:
-            source = knowledge_graph.entities.get(relation.source_entity)
-            if source:
-                all_related_entity_ids.add(source.id)
-        
-        # Add semantic suggestions based on entity type and name similarity
-        entity_suggestions = self._find_semantic_links(entity, knowledge_graph, all_related_entity_ids)
-        all_related_entity_ids.update(entity_suggestions)
-        
-        if all_related_entity_ids:
-            language = getattr(self.output_config, 'language', 'chs')
-            if language == 'chs':
-                content_parts.append("## 相关链接")
-            else:
-                content_parts.append("## See Also")
-            content_parts.append("")
-            
-            # Sort related entities alphabetically and convert to simplified Chinese
-            simplified_entities = []
-            for entity_id in all_related_entity_ids:
-                related_entity = knowledge_graph.entities.get(entity_id)
-                if related_entity:
-                    simplified_entities.append(related_entity.get_simplified_name())
-            
-            # Sort and deduplicate
-            sorted_entities = sorted(set(simplified_entities))
-            for entity_name in sorted_entities:
-                content_parts.append(f"- [[{entity_name}]]")
-            content_parts.append("")
-        
         # Create note
         note = ObsidianNote(
             filename=filename,
@@ -246,59 +150,6 @@ class ObsidianGenerator:
         )
         
         return note
-    
-    def _find_semantic_links(self, entity: Entity, knowledge_graph: KnowledgeGraph, 
-                           existing_relations: Set[str]) -> Set[str]:
-        """Find semantically related entities to create additional links"""
-        suggestions = set()
-        entity_lower = entity.get_simplified_name().lower()
-        entity_words = set(entity_lower.split())
-        
-        # Skip if entity already has many relations
-        if len(existing_relations) >= 8:
-            return suggestions
-        
-        for other_entity in knowledge_graph.entities.values():
-            if other_entity.id == entity.id:
-                continue
-            
-            if other_entity.id in existing_relations:
-                continue
-            
-            # Same type entities (moderate priority)
-            if entity.type == other_entity.type and len(suggestions) < 3:
-                suggestions.add(other_entity.id)
-                continue
-            
-            # Name similarity (high priority)
-            other_lower = other_entity.get_simplified_name().lower()
-            other_words = set(other_lower.split())
-            
-            # Check for word overlap
-            common_words = entity_words.intersection(other_words)
-            if common_words and len(suggestions) < 5:
-                suggestions.add(other_entity.id)
-                continue
-            
-            # Check for substring matches
-            if (entity_lower in other_lower or other_lower in entity_lower) and len(suggestions) < 5:
-                suggestions.add(other_entity.id)
-                continue
-            
-            # Description similarity (if available)
-            if entity.description and other_entity.description:
-                entity_desc_words = set(entity.get_simplified_description().lower().split())
-                other_desc_words = set(other_entity.get_simplified_description().lower().split())
-                desc_overlap = len(entity_desc_words.intersection(other_desc_words))
-                
-                if desc_overlap >= 2 and len(suggestions) < 6:
-                    suggestions.add(other_entity.id)
-        
-        # Limit total suggestions to avoid overwhelming
-        if len(suggestions) > 6:
-            suggestions = set(list(suggestions)[:6])
-        
-        return suggestions
     
     def _generate_index_note(self, knowledge_graph: KnowledgeGraph, source_file: str) -> ObsidianNote:
         """Generate an index note for the entire knowledge graph"""
@@ -478,25 +329,6 @@ class ObsidianGenerator:
         }
         
         return mappings.get(formatted, formatted)
-    
-    def _format_relation_descriptor(self, relation_type: str) -> str:
-        """Format relation type as a descriptive phrase for bullet points"""
-        # Convert snake_case to descriptive phrases
-        mappings = {
-            "defined_as": "定义特征",
-            "part_of": "归属关系",
-            "related_to": "相关联系",
-            "proposed_by": "提出背景",
-            "used_in": "应用场景",
-            "applies_to": "适用范围",
-            "causes": "因果关系",
-            "results_in": "结果影响",
-            "depends_on": "依赖关系",
-            "extends": "扩展发展"
-        }
-        
-        formatted = relation_type.replace('_', ' ').title()
-        return mappings.get(relation_type.lower(), formatted)
     
     def _process_description_links(self, description: str, knowledge_graph: KnowledgeGraph, current_entity_id: str = None) -> str:
         """Process entity description to ensure proper double linking"""

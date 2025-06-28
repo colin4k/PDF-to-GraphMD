@@ -34,9 +34,19 @@ class MinerUConfig:
 @dataclass
 class LLMConfig:
     """LLM-based extraction configuration"""
-    model_name: str = "gpt-3.5-turbo"
+    # API provider type
+    api_provider: str = "openai"  # "openai" or "google"
+    
+    # OpenAI-compatible API settings
+    model_name: str = "gemini-2.5-pro"
     api_key: Optional[str] = None
     base_url: Optional[str] = None
+    
+    # Google AI Studio settings
+    google_model_name: str = "gemini-2.5-pro"
+    google_api_key: Optional[str] = None
+    
+    # Common LLM settings
     temperature: float = 0.1
     max_tokens: int = 4000
     force_json: bool = True
@@ -132,8 +142,14 @@ class SystemConfig:
     def validate(self):
         """Validate configuration settings"""
         if self.extraction_method == ExtractionMethod.LLM:
-            if not self.llm.api_key and not os.getenv('OPENAI_API_KEY'):
-                raise ValueError("LLM API key must be provided")
+            if self.llm.api_provider == "openai":
+                if not self.llm.api_key and not os.getenv('OPENAI_API_KEY'):
+                    raise ValueError("OpenAI-compatible API key must be provided")
+            elif self.llm.api_provider == "google":
+                if not self.llm.google_api_key and not os.getenv('GOOGLE_API_KEY'):
+                    raise ValueError("Google API key must be provided")
+            else:
+                raise ValueError(f"Unsupported API provider: {self.llm.api_provider}")
         
         if not os.path.exists(os.path.dirname(self.output.output_dir)):
             os.makedirs(os.path.dirname(self.output.output_dir), exist_ok=True)

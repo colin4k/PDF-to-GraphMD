@@ -15,10 +15,20 @@
 
   # LLM-based extraction settings
   llm:
-    model_name: "gpt-3.5-turbo"
-    api_key: null  # Set via environment variable OPENAI_API_KEY
-    base_url: null  # Custom API endpoint if needed
-    temperature: 0.1
+    # API provider type: "openai" for OpenAI-compatible APIs, "google" for Google AI Studio
+    api_provider: "google"  # 可选值: "openai", "google"
+    
+    # OpenAI-compatible API settings (used when api_provider is "openai")
+    model_name: "google/gemini-2.5-pro-exp-03-25"
+    api_key: sk-xxx  # Set via environment variable OPENAI_API_KEY
+    base_url: https://openrouter.ai/api/v1  # Custom API endpoint if needed
+    
+    # Google AI Studio settings (used when api_provider is "google")
+    google_model_name: "gemini-2.5-pro-exp-03-25"  # Google模型名称
+    google_api_key: your-google-api-key  # Google AI Studio API key, 或设置环境变量 GOOGLE_API_KEY
+    
+    # 通用LLM设置
+    temperature: 0.7
     max_tokens: 4000
     force_json: true
     system_prompt: "You are an expert knowledge extraction system."
