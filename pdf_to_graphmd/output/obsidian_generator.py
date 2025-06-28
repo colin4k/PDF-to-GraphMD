@@ -4,7 +4,7 @@ Obsidian-compatible Markdown file generation module
 import os
 import logging
 from pathlib import Path
-from typing import Dict, List, Optional, Set, Any
+from typing import Dict, List, Optional, Set, Any, Tuple
 import yaml
 import re
 from datetime import datetime
