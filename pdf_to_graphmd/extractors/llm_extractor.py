@@ -8,7 +8,7 @@ import asyncio
 from dataclasses import asdict
 
 from ..models import Entity, Relation, KnowledgeTriple, KnowledgeGraph, DocumentContent
-from ..config import LLMConfig, OntologyConfig
+from ..config import LLMConfig, OntologyConfig, OutputConfig
 
 
 logger = logging.getLogger(__name__)
@@ -17,9 +17,10 @@ logger = logging.getLogger(__name__)
 class LLMExtractor:
     """LLM-based knowledge extraction using structured prompts"""
     
-    def __init__(self, llm_config: LLMConfig, ontology_config: OntologyConfig):
+    def __init__(self, llm_config: LLMConfig, ontology_config: OntologyConfig, output_config: OutputConfig = None):
         self.llm_config = llm_config
         self.ontology_config = ontology_config
+        self.output_config = output_config
         self.client = None
         self._setup_client()
     
@@ -157,7 +158,67 @@ class LLMExtractor:
         entity_types_str = ", ".join(self.ontology_config.entity_types)
         relation_types_str = ", ".join(self.ontology_config.relation_types)
         
-        system_prompt = f"""You are an expert knowledge extraction system. Your task is to extract entities and their relationships from the given text.
+        # Get language-specific prompts if available
+        if self.output_config and hasattr(self.output_config, 'language') and hasattr(self.output_config, 'language_prompts'):
+            language = getattr(self.output_config, 'language', 'en')
+            language_prompts = getattr(self.output_config, 'language_prompts', {})
+            
+            if language in language_prompts:
+                lang_config = language_prompts[language]
+                base_system_prompt = lang_config.get('system_prompt', "You are an expert knowledge extraction system.")
+                entity_prompt = lang_config.get('entity_prompt', "Extract entities from the following text:")
+                relation_prompt = lang_config.get('relation_prompt', "Analyze relationships between entities:")
+            else:
+                # Fallback to English
+                base_system_prompt = "You are an expert knowledge extraction system."
+                entity_prompt = "Extract entities from the following text:"
+                relation_prompt = "Analyze relationships between entities:"
+        else:
+            # Default English prompts
+            base_system_prompt = "You are an expert knowledge extraction system."
+            entity_prompt = "Extract entities from the following text:"
+            relation_prompt = "Analyze relationships between entities:"
+        
+        if self.output_config and getattr(self.output_config, 'language', 'en') == 'zh':
+            # Chinese prompts
+            system_prompt = f"""{base_system_prompt}你的任务是从给定文本中提取实体及其关系。
+
+实体类型（仅使用这些类型）: {entity_types_str}
+关系类型（仅使用这些类型）: {relation_types_str}
+
+按以下JSON格式提取信息：
+{{
+  "entities": [
+    {{
+      "id": "唯一标识符",
+      "name": "实体名称",
+      "type": "实体类型",
+      "description": "简要描述",
+      "aliases": ["别名1", "别名2"]
+    }}
+  ],
+  "relations": [
+    {{
+      "source_entity": "源实体id",
+      "relation_type": "关系类型",
+      "target_entity": "目标实体id",
+      "description": "关系描述",
+      "confidence": 0.95
+    }}
+  ]
+}}
+
+规则：
+1. 仅提取有意义的实体和关系
+2. 使用描述性但简洁的实体ID
+3. 确保关系中的所有实体ID都存在于实体列表中
+4. 根据清晰度分配置信度分数（0.0-1.0）
+5. 如果提到替代名称，请在别名中包含"""
+
+            user_prompt = f"从以下文本中提取知识：\n\n{text}"
+        else:
+            # English prompts
+            system_prompt = f"""{base_system_prompt} Your task is to extract entities and their relationships from the given text.
 
 ENTITY TYPES (use only these): {entity_types_str}
 RELATION TYPES (use only these): {relation_types_str}
@@ -191,7 +252,7 @@ Rules:
 4. Assign confidence scores (0.0-1.0) based on clarity
 5. Include alternative names in aliases if mentioned"""
 
-        user_prompt = f"Extract knowledge from this text:\n\n{text}"
+            user_prompt = f"Extract knowledge from this text:\n\n{text}"
         
         return [
             {"role": "system", "content": system_prompt},

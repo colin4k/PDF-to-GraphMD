@@ -50,7 +50,8 @@ class PDFToGraphMDProcessor:
             if self.config.extraction_method == ExtractionMethod.LLM:
                 self.knowledge_extractor = LLMExtractor(
                     self.config.llm, 
-                    self.config.ontology
+                    self.config.ontology,
+                    self.config.output
                 )
             else:
                 self.knowledge_extractor = NLPExtractor(

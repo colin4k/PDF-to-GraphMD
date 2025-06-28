@@ -69,6 +69,8 @@ class OutputConfig:
     include_images: bool = True
     include_tables: bool = True
     include_formulas: bool = True
+    language: str = "en"
+    language_prompts: Dict[str, Dict[str, str]] = field(default_factory=dict)
 
 
 @dataclass

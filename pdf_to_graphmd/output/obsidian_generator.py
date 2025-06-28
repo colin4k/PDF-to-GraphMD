@@ -102,6 +102,10 @@ class ObsidianGenerator:
         # Build content
         content_parts = []
         
+        # Add entity name as title
+        content_parts.append(f"# {entity.name}")
+        content_parts.append("")
+        
         # Add description
         if entity.description:
             content_parts.append(entity.description)
@@ -110,9 +114,13 @@ class ObsidianGenerator:
         # Get relations for this entity
         outgoing_relations, incoming_relations = knowledge_graph.get_entity_relations(entity.id)
         
-        # Add outgoing relations
+        # Add outgoing relations with language-aware headers
         if outgoing_relations:
-            content_parts.append("## 相关链接")
+            language = getattr(self.output_config, 'language', 'en')
+            if language == 'zh':
+                content_parts.append("## 相关链接")
+            else:
+                content_parts.append("## Related Links")
             content_parts.append("")
             
             # Group relations by type
@@ -134,7 +142,11 @@ class ObsidianGenerator:
         
         # Add incoming relations (backlinks)
         if incoming_relations:
-            content_parts.append("## 被引用")
+            language = getattr(self.output_config, 'language', 'en')
+            if language == 'zh':
+                content_parts.append("## 被引用")
+            else:
+                content_parts.append("## Referenced By")
             content_parts.append("")
             
             relation_groups = {}
@@ -155,7 +167,11 @@ class ObsidianGenerator:
         if document_content:
             embedded_content = self._get_embedded_content_for_entity(entity, document_content)
             if embedded_content:
-                content_parts.append("## 相关内容")
+                language = getattr(self.output_config, 'language', 'en')
+                if language == 'zh':
+                    content_parts.append("## 相关内容")
+                else:
+                    content_parts.append("## Related Content")
                 content_parts.append("")
                 content_parts.extend(embedded_content)
         
