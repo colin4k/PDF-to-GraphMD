@@ -45,6 +45,22 @@ class Entity:
         # Remove other problematic characters
         normalized = "".join(c for c in normalized if c.isalnum() or c in "_-.")
         return normalized
+    
+    def get_simplified_name(self) -> str:
+        """Get simplified Chinese name for display"""
+        import opencc
+        
+        # Convert traditional Chinese to simplified Chinese
+        converter = opencc.OpenCC('t2s')  # traditional to simplified
+        return converter.convert(self.name)
+    
+    def get_simplified_description(self) -> str:
+        """Get simplified Chinese description"""
+        import opencc
+        
+        # Convert traditional Chinese to simplified Chinese
+        converter = opencc.OpenCC('t2s')  # traditional to simplified
+        return converter.convert(self.description)
 
 
 @dataclass
