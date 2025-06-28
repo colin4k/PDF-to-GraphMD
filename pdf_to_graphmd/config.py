@@ -23,7 +23,6 @@ class MinerUConfig:
     output_formats: List[str] = field(default_factory=lambda: ["markdown", "json"])
     batch_size: int = 1
     vlm_backend: str = "vlm-transformers"  # 支持 magic-pdf 2.0.x 的 VLM 后端
-    magic_pdf_config: str = ""  # magic-pdf.json 配置文件路径
     source: str = "local"  # mineru CLI 的 --source 参数
 
 
@@ -69,7 +68,7 @@ class OutputConfig:
     include_images: bool = True
     include_tables: bool = True
     include_formulas: bool = True
-    language: str = "en"
+    language: str = "chs"
     language_prompts: Dict[str, Dict[str, str]] = field(default_factory=dict)
 
 

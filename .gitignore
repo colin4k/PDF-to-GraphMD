@@ -1,7 +1,7 @@
 config.yaml
 *.pdf
 logs/*
-obsidian_vault/*
+obsidian_vault*/*
 *.pyc
 pdf_to_graphmd.egg-info/*
 
