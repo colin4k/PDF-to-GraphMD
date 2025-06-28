@@ -182,7 +182,7 @@ class ObsidianGenerator:
                 content_parts.append("")
                 content_parts.extend(embedded_content)
         
-        # Add see also section with all related entities
+        # Add see also section with all related entities and semantic suggestions
         all_related_entities = set()
         for relation in outgoing_relations:
             target = knowledge_graph.entities.get(relation.target_entity)
@@ -193,6 +193,10 @@ class ObsidianGenerator:
             source = knowledge_graph.entities.get(relation.source_entity)
             if source:
                 all_related_entities.add((source.normalize_id(), source.name))
+        
+        # Add semantic suggestions based on entity type and name similarity
+        entity_suggestions = self._find_semantic_links(entity, knowledge_graph, all_related_entities)
+        all_related_entities.update(entity_suggestions)
         
         if all_related_entities:
             language = getattr(self.output_config, 'language', 'en')
@@ -218,6 +222,60 @@ class ObsidianGenerator:
         )
         
         return note
+    
+    def _find_semantic_links(self, entity: Entity, knowledge_graph: KnowledgeGraph, 
+                           existing_relations: Set[Tuple[str, str]]) -> Set[Tuple[str, str]]:
+        """Find semantically related entities to create additional links"""
+        suggestions = set()
+        entity_lower = entity.name.lower()
+        entity_words = set(entity_lower.split())
+        
+        # Skip if entity already has many relations
+        if len(existing_relations) >= 8:
+            return suggestions
+        
+        for other_entity in knowledge_graph.entities.values():
+            if other_entity.id == entity.id:
+                continue
+            
+            other_normalized = (other_entity.normalize_id(), other_entity.name)
+            if other_normalized in existing_relations:
+                continue
+            
+            # Same type entities (moderate priority)
+            if entity.type == other_entity.type and len(suggestions) < 3:
+                suggestions.add(other_normalized)
+                continue
+            
+            # Name similarity (high priority)
+            other_lower = other_entity.name.lower()
+            other_words = set(other_lower.split())
+            
+            # Check for word overlap
+            common_words = entity_words.intersection(other_words)
+            if common_words and len(suggestions) < 5:
+                suggestions.add(other_normalized)
+                continue
+            
+            # Check for substring matches
+            if (entity_lower in other_lower or other_lower in entity_lower) and len(suggestions) < 5:
+                suggestions.add(other_normalized)
+                continue
+            
+            # Description similarity (if available)
+            if entity.description and other_entity.description:
+                entity_desc_words = set(entity.description.lower().split())
+                other_desc_words = set(other_entity.description.lower().split())
+                desc_overlap = len(entity_desc_words.intersection(other_desc_words))
+                
+                if desc_overlap >= 2 and len(suggestions) < 6:
+                    suggestions.add(other_normalized)
+        
+        # Limit total suggestions to avoid overwhelming
+        if len(suggestions) > 6:
+            suggestions = set(list(suggestions)[:6])
+        
+        return suggestions
     
     def _generate_index_note(self, knowledge_graph: KnowledgeGraph, source_file: str) -> ObsidianNote:
         """Generate an index note for the entire knowledge graph"""
